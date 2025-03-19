@@ -37,23 +37,29 @@ public class BaggageCompartment3D extends Application {
     private final Rotate rotateX = new Rotate(20, Rotate.X_AXIS);
     private final Rotate rotateY = new Rotate(-20, Rotate.Y_AXIS);
     private final Translate cameraTranslate = new Translate(0, 0, -500);
+
     // Основные группы сцены
     private final Group world = new Group();
     private final Group luggageGroup = new Group();
     private final List<Baggage> baggageList = new ArrayList<>();
     private final Group cameraHolder = new Group();
+
     // Параметры отсека и багажа
     private Box compartment = null;
     private int nextBaggageId = 1;
     private boolean alertShown = false;
+
     // Экземпляр алгоритма размещения
     private BaggagePlacementAlgorithm placementAlgorithm = null;
-    // Старый код для автоматической сетки (не используется в этом примере)
+
+    // Несколько констант (старый код автоматической сетки, не используется)
     private final int itemsPerRow = 5;
     private final double spacingX = 10;
     private final double spacingZ = 10;
-    // Таймлайн для обновления физики (например, 25 кадров в секунду)
+
+    // Таймлайн для обновления физики (~25 FPS)
     private Timeline physicsTimeline;
+
     @Override
     public void start(Stage primaryStage) {
         // Панель ввода параметров отсека
@@ -72,6 +78,7 @@ public class BaggageCompartment3D extends Application {
                 compHeightLabel, compHeightField, setCompartmentButton);
         compartmentPanel.setPadding(new Insets(10));
         compartmentPanel.setAlignment(Pos.CENTER);
+
         // Панель ввода параметров сумки
         Label lengthLabel = new Label("Длина сумки:");
         TextField lengthField = new TextField();
@@ -90,6 +97,7 @@ public class BaggageCompartment3D extends Application {
         baggagePanel.setPadding(new Insets(10));
         baggagePanel.setAlignment(Pos.CENTER);
         VBox topPanel = new VBox(10, compartmentPanel, baggagePanel);
+
         // Добавляем группу багажа и камеру в сцену
         world.getChildren().add(luggageGroup);
         PerspectiveCamera camera = new PerspectiveCamera(true);
@@ -110,6 +118,7 @@ public class BaggageCompartment3D extends Application {
         BorderPane rootPane = new BorderPane();
         rootPane.setTop(topPanel);
         rootPane.setCenter(subScene);
+
         // Устанавливаем отсек
         setCompartmentButton.setOnAction(e -> {
             try {
@@ -136,7 +145,7 @@ public class BaggageCompartment3D extends Application {
                 cameraHolder.translateZProperty().bind(compartment.translateZProperty());
                 // Инициализация алгоритма размещения с margin = 10 и gridStep = 5
                 placementAlgorithm = new BaggagePlacementAlgorithm(compLength, compHeight, compWidth, 10, 5);
-                // Запускаем физическую симуляцию (если еще не запущена)
+                // Запускаем физическую симуляцию (если ещё не запущена)
                 if (physicsTimeline == null) {
                     physicsTimeline = new Timeline(new KeyFrame(Duration.millis(40), event -> updatePhysics()));
                     physicsTimeline.setCycleCount(Timeline.INDEFINITE);
@@ -146,6 +155,7 @@ public class BaggageCompartment3D extends Application {
                 System.out.println("Ошибка: введите корректные числовые значения для размеров отсека.");
             }
         });
+
         // Добавляем сумку с использованием алгоритма размещения
         addButton.setOnAction(e -> {
             try {
@@ -159,7 +169,7 @@ public class BaggageCompartment3D extends Application {
                     alert.showAndWait();
                     return;
                 }
-                // Ищем оптимальное размещение
+                // Ищем оптимальное размещение (с учётом плотной упаковки)
                 BaggagePlacementAlgorithm.Placement placement = placementAlgorithm.findOptimalPlacement(bag);
                 if (placement != null) {
                     bag.setPlacement(placement);
@@ -179,13 +189,13 @@ public class BaggageCompartment3D extends Application {
                 System.out.println("Ошибка: введите корректные числовые значения для размеров сумки.");
             }
         });
+
         // Перестроение багажа по приоритету – переупаковка ранее добавленных сумок
         resortButton.setOnAction(e -> {
             if (placementAlgorithm == null) return;
-            // Сортировка сумок по приоритету и очистка текущих размещений
-            baggageList.sort(Comparator.comparingDouble(Baggage::getPriority));
+            // Сортируем сумки по приоритету (большие первым – чтобы максимально заполнить объём)
+            baggageList.sort(Comparator.comparingDouble(Baggage::getPriority).reversed());
             placementAlgorithm.clearPlacements();
-            // Для каждого багажа заново ищем оптимальное размещение
             for (Baggage bag : baggageList) {
                 BaggagePlacementAlgorithm.Placement placement = placementAlgorithm.findOptimalPlacement(bag);
                 if (placement != null) {
@@ -198,15 +208,17 @@ public class BaggageCompartment3D extends Application {
                 }
             }
         });
+
         Scene scene = new Scene(rootPane, 800, 650, true);
-        primaryStage.setTitle("3D Отсек Багажа с физикой и умным алгоритмом размещения");
+        primaryStage.setTitle("3D Отсек Багажа с физикой и плотной упаковкой");
         primaryStage.setScene(scene);
         primaryStage.show();
-        // Периодическая проверка корректности размещения сумок (если вдруг они выходят за пределы отсека)
+
         Timeline checkTimeline = new Timeline(new KeyFrame(Duration.seconds(2), event -> checkBaggagePositions()));
         checkTimeline.setCycleCount(Timeline.INDEFINITE);
         checkTimeline.play();
     }
+
     // Проверка, что все сумки находятся внутри отсека
     private void checkBaggagePositions() {
         if (compartment == null) return;
@@ -239,6 +251,7 @@ public class BaggageCompartment3D extends Application {
             alertShown = false;
         }
     }
+
     // Управление камерой мышью
     private void initMouseControl(SubScene subScene) {
         subScene.setOnMousePressed((MouseEvent event) -> {
@@ -252,9 +265,10 @@ public class BaggageCompartment3D extends Application {
             rotateY.setAngle(anchorAngleY + (anchorX - event.getSceneX()) / 2);
         });
     }
+
     //////////////////////////////////////////////////////////////////////////////////////////
     //  Класс BaggagePlacementAlgorithm – алгоритм оптимального размещения сумок
-    //  Перебираем по Y (от пола) затем X и Z
+    //  Перебираем по Y (снизу), затем X и Z, выбирая кандидат с минимальным зазором между объектом и опорой
     //////////////////////////////////////////////////////////////////////////////////////////
     public static class BaggagePlacementAlgorithm {
         private double compartmentWidth;
@@ -263,6 +277,7 @@ public class BaggageCompartment3D extends Application {
         private double margin;
         private double gridStep;
         private List<Baggage> placedBaggage;
+
         public BaggagePlacementAlgorithm(double compartmentWidth, double compartmentHeight, double compartmentDepth,
                                          double margin, double gridStep) {
             this.compartmentWidth = compartmentWidth;
@@ -272,11 +287,13 @@ public class BaggageCompartment3D extends Application {
             this.gridStep = gridStep;
             this.placedBaggage = new ArrayList<>();
         }
-        // Метод для очистки размещений (при перестроении)
+
+        // Очищаем текущие размещения (при перестроении)
         public void clearPlacements() {
             placedBaggage.clear();
         }
-        // Класс, описывающий размещение сумки
+
+        // Класс, описывающий найденное размещение сумки
         public static class Placement {
             public double x;
             public double y;
@@ -293,10 +310,12 @@ public class BaggageCompartment3D extends Application {
                 return "Placement: x=" + x + ", y=" + y + ", z=" + z + ", rotated=" + rotated;
             }
         }
+
         // Добавляем размещённую сумку для проверки пересечений
         public void addPlacedBaggage(Baggage bag) {
             placedBaggage.add(bag);
         }
+
         // Ищем оптимальное размещение: сначала без поворота, затем с (если возможно)
         public Placement findOptimalPlacement(Baggage bag) {
             Placement placement = findPlacementForOrientation(bag, false);
@@ -307,8 +326,11 @@ public class BaggageCompartment3D extends Application {
             }
             return null;
         }
+
         /**
-         * Перебираем Y (снизу), затем X и Z, чтобы найти допустимое место.
+         * Перебираем по Y, затем X и Z, собирая все кандидатные позиции, для каждой вычисляем cost –
+         * разница (gap) между выбранным значением y и уровнем поддержки (пол или верх объекта ниже).
+         * Выбираем вариант с минимальным зазором – чем меньше свободного пространства, тем плотнее упаковка.
          */
         private Placement findPlacementForOrientation(Baggage bag, boolean rotated) {
             double length = rotated ? bag.getWidth() : bag.getLength();
@@ -320,17 +342,56 @@ public class BaggageCompartment3D extends Application {
             double maxZ = compartmentDepth / 2 - margin - width / 2;
             double minY = -compartmentHeight / 2 + margin + height / 2;
             double maxY = compartmentHeight / 2 - margin - height / 2;
+
+            double bestCost = Double.MAX_VALUE;
+            Placement bestPlacement = null;
+
             for (double y = minY; y <= maxY; y += gridStep) {
                 for (double x = minX; x <= maxX; x += gridStep) {
                     for (double z = minZ; z <= maxZ; z += gridStep) {
                         if (!isColliding(x, y, z, length, height, width)) {
-                            return new Placement(x, y, z, rotated);
+                            // Вычисляем уровень поддержки для данной кандидатной позиции:
+                            double support = getSupportLevel(x, y, z, length, height, width);
+                            double gap = y - support;  // чем меньше gap, тем плотнее упаковка
+                            if (gap < bestCost) {
+                                bestCost = gap;
+                                bestPlacement = new Placement(x, y, z, rotated);
+                            }
                         }
                     }
                 }
             }
-            return null;
+            return bestPlacement;
         }
+
+        /**
+         * Возвращает уровень поддержки для кандидата по координатам (x, y, z).
+         * Если нижняя грань сумки (y - height/2) почти равна полу, поддержка = пол.
+         * Если кандидату может служить верхняя грань какой-либо сумки, возвращаем максимальный такой уровень.
+         */
+        private double getSupportLevel(double x, double y, double z, double length, double height, double width) {
+            double floor = -compartmentHeight/2 + margin + height/2;
+            double best = floor;
+            for (Baggage placed : placedBaggage) {
+                double top = placed.getY() + placed.getHeight()/2;
+                // Если кандидатная нижняя грань почти совпадает с верхом размещённой сумки
+                if (Math.abs((y - height/2) - top) < gridStep) {
+                    double candMinX = x - length/2;
+                    double candMaxX = x + length/2;
+                    double candMinZ = z - width/2;
+                    double candMaxZ = z + width/2;
+                    double objMinX = placed.getX() - (placed.isRotated() ? placed.getWidth() : placed.getLength())/2;
+                    double objMaxX = placed.getX() + (placed.isRotated() ? placed.getWidth() : placed.getLength())/2;
+                    double objMinZ = placed.getZ() - (placed.isRotated() ? placed.getLength() : placed.getWidth())/2;
+                    double objMaxZ = placed.getZ() + (placed.isRotated() ? placed.getLength() : placed.getWidth())/2;
+                    if (candMinX >= objMinX && candMaxX <= objMaxX && candMinZ >= objMinZ && candMaxZ <= objMaxZ) {
+                        if (top > best) best = top;
+                    }
+                }
+            }
+            return best;
+        }
+
         /**
          * Проверка коллизии (AABB) между новой сумкой и уже размещёнными.
          */
@@ -362,8 +423,9 @@ public class BaggageCompartment3D extends Application {
             return false;
         }
     }
+
     //////////////////////////////////////////////////////////////////////////////////////////
-    //  Класс Baggage – сумка (багаж) в 3D-сцене с физикой и методами размещения
+    //  Класс Baggage – сумка (багаж) в 3D-сцене с физикой
     //////////////////////////////////////////////////////////////////////////////////////////
     private class Baggage extends Group {
         private int id;
@@ -374,8 +436,9 @@ public class BaggageCompartment3D extends Application {
         private boolean rotated;  // Флаг: сумка размещена с поворотом
         private Box box;
         private Text label;
-        // Параметр вертикальной скорости для физической симуляции
+        // Вертикальная скорость (для физической симуляции)
         public double vY = 0;
+
         public Baggage(int id, double length, double width, double height, boolean fragile) {
             this.id = id;
             this.length = length;
@@ -409,7 +472,7 @@ public class BaggageCompartment3D extends Application {
         public boolean isRotated() {
             return rotated;
         }
-        // Для алгоритма используем translateX/Y/Z как координаты центра
+        // Координаты центра (используем translateX/Y/Z)
         public double getX() {
             return getTranslateX();
         }
@@ -419,9 +482,10 @@ public class BaggageCompartment3D extends Application {
         public double getZ() {
             return getTranslateZ();
         }
+
         /**
          * Применяем найденное размещение: устанавливаем координаты и флаг поворота.
-         * Если объект размещён с поворотом, изменяем визуальные размеры коробки.
+         * При повороте изменяем визуальные размеры коробки.
          */
         public void setPlacement(BaggagePlacementAlgorithm.Placement placement) {
             setTranslateX(placement.x);
@@ -433,6 +497,7 @@ public class BaggageCompartment3D extends Application {
                 box.setDepth(width);
             }
         }
+
         /**
          * Расчет приоритета – объём сумки (с поправкой для хрупкого багажа).
          */
@@ -440,38 +505,35 @@ public class BaggageCompartment3D extends Application {
             double volume = length * width * height;
             return fragile ? volume - 1000 : volume;
         }
+
         // Если длина и ширина различны, допускается поворот
         public boolean canRotate() {
             return length != width;
         }
     }
+
     /**
      * Метод обновления физики.
-     * Для каждой сумки проверяем, поддерживается ли она полом или другой сумкой.
-     * Если нет – к вертикальной скорости применяется гравитация, и объект опускается вниз.
-     * Дополнительно проверяем, чтобы поддерживающая сумка имела достаточную опору
-     * (если над маленькой сумкой стоит большая, объект падает).
+     * Для каждой сумки проверяем, опора ли её поддерживает (пол или другая сумка).
+     * Если сумка не поддерживается, к вертикальной скорости применяется гравитация, и объект опускается вниз.
+     * Дополнительно проверяется, что поддерживающая сумка имеет достаточную площадь опоры.
      */
     private void updatePhysics() {
         if (compartment == null) return;
-        // Координата пола отсека:
-        double floorY = -compartment.getHeight() / 2 + 10; // margin = 10
-        // Для каждого объекта:
+        double floorY = -compartment.getHeight() / 2 + 10;  // margin = 10
         for (Baggage bag : baggageList) {
             boolean supported = false;
-            // Проверка: касается ли пол?
+            // Проверяем, касается ли сумка пола
             if (bag.getTranslateY() - bag.getHeight() / 2 <= floorY + 1) {
                 supported = true;
                 bag.setTranslateY(floorY + bag.getHeight() / 2);
                 bag.vY = 0;
             } else {
-                // Поиск среди других сумок, расположенных ниже
+                // Поиск среди других сумок
                 for (Baggage other : baggageList) {
                     if (other == bag) continue;
                     double otherTop = other.getTranslateY() + other.getHeight() / 2;
-                    // Если нижняя грань текущей сумки почти совпадает с верхней гранью другой
                     if (Math.abs((bag.getTranslateY() - bag.getHeight() / 2) - otherTop) < 3) {
-                        // Проверяем, что проекция по X/Z полностью лежит внутри опоры другой сумки
                         double bMinX = bag.getTranslateX() - (bag.isRotated() ? bag.getWidth() : bag.getLength()) / 2;
                         double bMaxX = bag.getTranslateX() + (bag.isRotated() ? bag.getWidth() : bag.getLength()) / 2;
                         double bMinZ = bag.getTranslateZ() - (bag.isRotated() ? bag.getLength() : bag.getWidth()) / 2;
@@ -482,7 +544,6 @@ public class BaggageCompartment3D extends Application {
                         double oMaxZ = other.getTranslateZ() + (other.isRotated() ? other.getLength() : other.getWidth()) / 2;
                         if (bMinX >= oMinX && bMaxX <= oMaxX && bMinZ >= oMinZ && bMaxZ <= oMaxZ) {
                             supported = true;
-                            // Приклеиваем сумку к верхней грани поддерживающей сумки
                             double newY = otherTop + bag.getHeight() / 2;
                             bag.setTranslateY(newY);
                             bag.vY = 0;
@@ -491,13 +552,13 @@ public class BaggageCompartment3D extends Application {
                     }
                 }
             }
-            // Если не поддерживается – применяем гравитацию
             if (!supported) {
-                bag.vY += -0.5;  // ускорение гравитации (подберите по вкусу)
+                bag.vY += -0.5; // Гравитация
                 bag.setTranslateY(bag.getTranslateY() + bag.vY);
             }
         }
     }
+
     public static void main(String[] args) {
         launch(args);
     }
