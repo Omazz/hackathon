@@ -118,19 +118,11 @@
 
 Однако, в ходе работы систему получилось реализовать, и сейчас desktop-приложение выглядит следующим образом:
 
-![Ошибка](./rsc/interface_desktop_1.png)
-
-![Ошибка](./rsc/interface_desktop_2.png)
-
-![Ошибка](./rsc/interface_desktop_3.png)
+![Ошибка](./rsc/desktop.gif)
 
 При этом, web-приложение имеет следующий интерфейс:
 
-![Ошибка](./rsc/interface_web_1.png)
-
-![Ошибка](./rsc/interface_web_2.png)
-
-![Ошибка](./rsc/interface_web_3.png)
+![Ошибка](./rsc/web.gif)
 
 
 ---
