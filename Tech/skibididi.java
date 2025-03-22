@@ -2,6 +2,7 @@ package org.example.algos_fx;
 import javafx.animation.KeyFrame;
 import javafx.animation.Timeline;
 import javafx.application.Application;
+import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.*;
@@ -26,6 +27,10 @@ import javafx.scene.transform.Rotate;
 import javafx.scene.transform.Translate;
 import javafx.stage.Stage;
 import javafx.util.Duration;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -37,26 +42,21 @@ public class BaggageCompartment3D extends Application {
     private final Rotate rotateX = new Rotate(20, Rotate.X_AXIS);
     private final Rotate rotateY = new Rotate(-20, Rotate.Y_AXIS);
     private final Translate cameraTranslate = new Translate(0, 0, -500);
-
     // Основные группы сцены
     private final Group world = new Group();
     private final Group luggageGroup = new Group();
     private final List<Baggage> baggageList = new ArrayList<>();
     private final Group cameraHolder = new Group();
-
     // Параметры отсека и багажа
     private Box compartment = null;
     private int nextBaggageId = 1;
     private boolean alertShown = false;
-
     // Экземпляр алгоритма размещения
     private BaggagePlacementAlgorithm placementAlgorithm = null;
-
     // Несколько констант (старый код автоматической сетки, не используется)
     private final int itemsPerRow = 5;
     private final double spacingX = 10;
     private final double spacingZ = 10;
-
     // Таймлайн для обновления физики (~25 FPS)
     private Timeline physicsTimeline;
 
@@ -96,7 +96,11 @@ public class BaggageCompartment3D extends Application {
                 heightLabel, heightField, fragileCheck, addButton, resortButton);
         baggagePanel.setPadding(new Insets(10));
         baggagePanel.setAlignment(Pos.CENTER);
-        VBox topPanel = new VBox(10, compartmentPanel, baggagePanel);
+
+        // КНОПКА для загрузки коробок из базы данных через JDBC
+        Button loadBoxesButton = new Button("Загрузить коробки из БД");
+        loadBoxesButton.setOnAction(e -> loadBoxesFromDB());
+        VBox topPanel = new VBox(10, compartmentPanel, baggagePanel, loadBoxesButton);
 
         // Добавляем группу багажа и камеру в сцену
         world.getChildren().add(luggageGroup);
@@ -213,10 +217,72 @@ public class BaggageCompartment3D extends Application {
         primaryStage.setTitle("3D Отсек Багажа с физикой и плотной упаковкой");
         primaryStage.setScene(scene);
         primaryStage.show();
-
         Timeline checkTimeline = new Timeline(new KeyFrame(Duration.seconds(2), event -> checkBaggagePositions()));
         checkTimeline.setCycleCount(Timeline.INDEFINITE);
         checkTimeline.play();
+    }
+
+    // Метод для загрузки коробок из базы данных с использованием JDBC
+    private void loadBoxesFromDB() {
+        if (compartment == null) {
+            Alert alert = new Alert(Alert.AlertType.ERROR, "Сначала установите размеры отсека!");
+            alert.showAndWait();
+            return;
+        }
+
+        // Создаём задачу, которая будет выполняться в фоне
+        Task<List<Baggage>> loadTask = new Task<List<Baggage>>() {
+            @Override
+            protected List<Baggage> call() throws Exception {
+                List<Baggage> loadedBaggage = new ArrayList<>();
+                // Загружаем драйвер PostgreSQL (обычно можно не делать, если используется современная версия JDBC)
+                Class.forName("org.postgresql.Driver");
+                try (Connection conn = DriverManager.getConnection(
+                        "jdbc:postgresql://localhost:5432/myHibernate", "postgres", "expo");
+                     Statement stmt = conn.createStatement();
+                     ResultSet rs = stmt.executeQuery("SELECT id, height, width, length, is_fragile FROM boxes")) {
+                    while (rs.next()) {
+                        String id = rs.getString("id");
+                        String heightStr = rs.getString("height");
+                        String widthStr = rs.getString("width");
+                        String lengthStr = rs.getString("length");
+                        double height = Double.parseDouble(heightStr);
+                        double width = Double.parseDouble(widthStr);
+                        double length = Double.parseDouble(lengthStr);
+                        boolean fragile = rs.getBoolean("is_fragile");
+                        Baggage bag = new Baggage(nextBaggageId++, length, width, height, fragile);
+                        // Подбор оптимального размещения для коробки
+                        BaggagePlacementAlgorithm.Placement placement = placementAlgorithm.findOptimalPlacement(bag);
+                        if (placement != null) {
+                            bag.setPlacement(placement);
+                            loadedBaggage.add(bag);
+                        }
+                        // Если коробка не может быть размещена, можно логировать или игнорировать,
+                        // но не следует блокировать выполнение задачи модальными диалогами.
+                    }
+                }
+                return loadedBaggage;
+            }
+        };
+        // После успешного выполнения задачи обновляем UI (находитесь в FX-потоке)
+        loadTask.setOnSucceeded(e -> {
+            List<Baggage> loaded = loadTask.getValue();
+            for (Baggage bag : loaded) {
+                baggageList.add(bag);
+                luggageGroup.getChildren().add(bag);
+                placementAlgorithm.addPlacedBaggage(bag);
+            }
+        });
+        loadTask.setOnFailed(e -> {
+            Throwable ex = loadTask.getException();
+            ex.printStackTrace();=
+            Alert alert = new Alert(Alert.AlertType.ERROR, "Ошибка при загрузке коробок: " + ex.getMessage());
+            alert.showAndWait();
+        });
+        // Запускаем задачу в отдельном потоке
+        Thread thread = new Thread(loadTask);
+        thread.setDaemon(true); // чтобы поток завершался вместе с приложением
+        thread.start();
     }
 
     // Проверка, что все сумки находятся внутри отсека
@@ -268,7 +334,6 @@ public class BaggageCompartment3D extends Application {
 
     //////////////////////////////////////////////////////////////////////////////////////////
     //  Класс BaggagePlacementAlgorithm – алгоритм оптимального размещения сумок
-    //  Перебираем по Y (снизу), затем X и Z, выбирая кандидат с минимальным зазором между объектом и опорой
     //////////////////////////////////////////////////////////////////////////////////////////
     public static class BaggagePlacementAlgorithm {
         private double compartmentWidth;
@@ -299,12 +364,14 @@ public class BaggageCompartment3D extends Application {
             public double y;
             public double z;
             public boolean rotated; // Если true – сумка с поворотом (swap length и width)
+
             public Placement(double x, double y, double z, boolean rotated) {
                 this.x = x;
                 this.y = y;
                 this.z = z;
                 this.rotated = rotated;
             }
+
             @Override
             public String toString() {
                 return "Placement: x=" + x + ", y=" + y + ", z=" + z + ", rotated=" + rotated;
@@ -342,10 +409,8 @@ public class BaggageCompartment3D extends Application {
             double maxZ = compartmentDepth / 2 - margin - width / 2;
             double minY = -compartmentHeight / 2 + margin + height / 2;
             double maxY = compartmentHeight / 2 - margin - height / 2;
-
             double bestCost = Double.MAX_VALUE;
             Placement bestPlacement = null;
-
             for (double y = minY; y <= maxY; y += gridStep) {
                 for (double x = minX; x <= maxX; x += gridStep) {
                     for (double z = minZ; z <= maxZ; z += gridStep) {
@@ -370,20 +435,20 @@ public class BaggageCompartment3D extends Application {
          * Если кандидату может служить верхняя грань какой-либо сумки, возвращаем максимальный такой уровень.
          */
         private double getSupportLevel(double x, double y, double z, double length, double height, double width) {
-            double floor = -compartmentHeight/2 + margin + height/2;
+            double floor = -compartmentHeight / 2 + margin + height / 2;
             double best = floor;
             for (Baggage placed : placedBaggage) {
-                double top = placed.getY() + placed.getHeight()/2;
+                double top = placed.getY() + placed.getHeight() / 2;
                 // Если кандидатная нижняя грань почти совпадает с верхом размещённой сумки
-                if (Math.abs((y - height/2) - top) < gridStep) {
-                    double candMinX = x - length/2;
-                    double candMaxX = x + length/2;
-                    double candMinZ = z - width/2;
-                    double candMaxZ = z + width/2;
-                    double objMinX = placed.getX() - (placed.isRotated() ? placed.getWidth() : placed.getLength())/2;
-                    double objMaxX = placed.getX() + (placed.isRotated() ? placed.getWidth() : placed.getLength())/2;
-                    double objMinZ = placed.getZ() - (placed.isRotated() ? placed.getLength() : placed.getWidth())/2;
-                    double objMaxZ = placed.getZ() + (placed.isRotated() ? placed.getLength() : placed.getWidth())/2;
+                if (Math.abs((y - height / 2) - top) < gridStep) {
+                    double candMinX = x - length / 2;
+                    double candMaxX = x + length / 2;
+                    double candMinZ = z - width / 2;
+                    double candMaxZ = z + width / 2;
+                    double objMinX = placed.getX() - (placed.isRotated() ? placed.getWidth() : placed.getLength()) / 2;
+                    double objMaxX = placed.getX() + (placed.isRotated() ? placed.getWidth() : placed.getLength()) / 2;
+                    double objMinZ = placed.getZ() - (placed.isRotated() ? placed.getLength() : placed.getWidth()) / 2;
+                    double objMaxZ = placed.getZ() + (placed.isRotated() ? placed.getLength() : placed.getWidth()) / 2;
                     if (candMinX >= objMinX && candMaxX <= objMaxX && candMinZ >= objMinZ && candMaxZ <= objMaxZ) {
                         if (top > best) best = top;
                     }
@@ -457,28 +522,36 @@ public class BaggageCompartment3D extends Application {
             label.setTranslateX(-length / 4);
             getChildren().addAll(box, label);
         }
+
         public double getLength() {
             return length;
         }
+
         public double getWidth() {
             return width;
         }
+
         public double getHeight() {
             return height;
         }
+
         public boolean isFragile() {
             return fragile;
         }
+
         public boolean isRotated() {
             return rotated;
         }
+
         // Координаты центра (используем translateX/Y/Z)
         public double getX() {
             return getTranslateX();
         }
+
         public double getY() {
             return getTranslateY();
         }
+
         public double getZ() {
             return getTranslateZ();
         }
@@ -510,6 +583,7 @@ public class BaggageCompartment3D extends Application {
         public boolean canRotate() {
             return length != width;
         }
+
     }
 
     /**
