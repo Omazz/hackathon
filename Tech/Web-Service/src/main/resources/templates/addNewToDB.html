@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Система прогнозирования</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Montserrat', sans-serif;
+            min-height: 100vh;
+            overflow: hidden;
+            background: #1b5e20;
+        }
+        #background-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        .container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            z-index: 2;
+        }
+        h1 {
+            font-size: 4.5rem;
+            text-align: center;
+            color: #ffffff;
+            text-transform: uppercase;
+            position: absolute;
+            top: 3%;
+            left: 50%;
+            transform: translateX(-50%);
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+            letter-spacing: 4px;
+            transition: all 0.5s ease;
+            opacity: 0;
+            will-change: transform, opacity;
+        }
+        .particle {
+            position: absolute;
+            background: white;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .form-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            max-width: 500px;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            z-index: 3;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 700;
+            color: #ffffff;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        input[type="number"],
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: rgba(255,255,255,0.2);
+            color: #ffffff;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+        input[type="file"] {
+            padding: 10px;
+            cursor: pointer;
+        }
+        input[type="file"]::-webkit-file-upload-button {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            color: #ffffff;
+            margin-right: 10px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        input[type="file"]::-webkit-file-upload-button:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        input::placeholder {
+            color: rgba(255,255,255,0.6);
+        }
+        input:focus {
+            outline: none;
+            background: rgba(255,255,255,0.3);
+            box-shadow: 0 0 0 2px rgba(255,255,255,0.5);
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            background: linear-gradient(45deg, #2e7d32, #4caf50);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-top: 10px;
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76,175,80,0.4);
+        }
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.5rem;
+            }
+            .form-container {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<canvas id="background-canvas"></canvas>
+<div class="container">
+    <h1 id="main-title">Траты за компенсацию</h1>
+    <div class="form-container">
+        <form id="paramsForm">
+            <div class="form-group">
+                <label for="width">Ширина (px)</label>
+                <input type="number" id="width" name="width" placeholder="Введите ширину" required>
+            </div>
+            <div class="form-group">
+                <label for="height">Высота (px)</label>
+                <input type="number" id="height" name="height" placeholder="Введите высоту" required>
+            </div>
+            <div class="form-group">
+                <label for="length">Длина (px)</label>
+                <input type="number" id="length" name="length" placeholder="Введите длину" required>
+            </div>
+            <div class="form-group">
+                <label for="imageInput">Загрузить изображение</label>
+                <input type="file" id="imageInput" name="imageInput" accept="image/*" required>
+            </div>
+            <button type="submit" class="submit-btn">Загрузить</button>
+        </form>
+    </div>
+</div>
+<script type="module">
+    import * as THREE from "https://esm.sh/three";
+    // Настройка THREE.js
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({
+        canvas: document.getElementById('background-canvas'),
+        antialias: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x1b5e20);
+    const geometry = new THREE.PlaneGeometry(100, 100, 50, 50);
+    const material = new THREE.MeshBasicMaterial({
+        color: 0x4caf50,
+        wireframe: true
+    });
+    const grid = new THREE.Mesh(geometry, material);
+    scene.add(grid);
+    camera.position.z = 50;
+    function animate() {
+        requestAnimationFrame(animate);
+        grid.rotation.x += 0.001;
+        grid.rotation.y += 0.002;
+        renderer.render(scene, camera);
+    }
+    animate();
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    // Функция создания частиц
+    function createParticles(element) {
+        const rect = element.getBoundingClientRect();
+        const particles = [];
+        const particleCount = 150; // Увеличенное количество частиц
+        for (let i = 0; i < particleCount; i++) {
+            const particle = document.createElement('div');
+            particle.className = 'particle';
+
+            const x = rect.left + rect.width * Math.random();
+            const y = rect.top + rect.height * Math.random();
+
+            particle.style.width = '3px';
+            particle.style.height = '3px';
+            particle.style.left = `${x}px`;
+            particle.style.top = `${y}px`;
+
+            document.body.appendChild(particle);
+            particles.push(particle);
+        }
+        return particles;
+    }
+    // Анимация заголовка
+function animateTitle() {
+    const title = document.getElementById('main-title');
+    const formContainer = document.querySelector('.form-container');
+
+    gsap.fromTo(title,
+        {
+            x: -window.innerWidth,
+            opacity: 1
+        },
+        {
+            duration: 1.5,
+            x: 0,
+            ease: "power2.out",
+            onComplete: () => {
+                setTimeout(() => {
+                    const particles = createParticles(title);
+
+                    particles.forEach((particle) => {
+                        const angle = Math.random() * Math.PI * 2;
+                        const radius = 200 + Math.random() * 400;
+
+                        gsap.to(particle, {
+                            duration: 1.5 + Math.random(),
+                            x: `+=${Math.cos(angle) * radius}`,
+                            y: `+=${Math.sin(angle) * radius}`,
+                            opacity: 0,
+                            ease: "power2.out",
+                            onComplete: () => particle.remove()
+                        });
+                    });
+                    gsap.to(title, {
+                        duration: 0.3,
+                        opacity: 0,
+                        scale: 1.5,
+                        ease: "power2.in",
+                        onComplete: () => {
+                            // Меняем текст, пока он невидимый
+                            title.textContent = "ТРАТЫ НА КОМПЕНСАЦИЮ ОТМЕНЯЮТСЯ";
+
+                            setTimeout(() => {
+                                gsap.to(title, {
+                                    duration: 0.5,
+                                    opacity: 1,
+                                    scale: 1,
+                                    ease: "power2.out"
+                                });
+
+                                // Показываем форму после взрыва
+                                formContainer.style.opacity = '1';
+                            }, 1000);
+                        }
+                    });
+                }, 500);
+            }
+        }
+    );
+}
+    // Запуск анимации после загрузки страницы
+    window.addEventListener('load', animateTitle);
+    // Обработка формы
+    document.getElementById('paramsForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+
+        const width = document.getElementById('width').value;
+        const height = document.getElementById('height').value;
+        const length = document.getElementById('length').value;
+        const imageInput = document.getElementById('imageInput');
+        const box = {
+            width: width,
+            height: height,
+            length: length
+        };
+        const formData = new FormData();
+        formData.append('box', new Blob([JSON.stringify(box)], { type: 'application/json' }));
+        if (imageInput.files && imageInput.files.length > 0) {
+            formData.append('image', imageInput.files[0]);
+        }
+        fetch('/box/api/save', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error("Ошибка запроса, статус: " + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log("Box saved:", data);
+            alert("Объект сохранён. Хрупкость: " + data.isFragile);
+        })
+        .catch(error => {
+            console.error("Ошибка при сохранении box", error);
+            alert("Ошибка при сохранении.");
+        });
+    });
+</script>
+</body>
+</html>
